@@ -1,0 +1,12 @@
+localhost {
+    
+    #tls /etc/pki/tls/certs/cert.crt /etc/pki/tls/private/cert.key
+
+    handle_path /console* {
+        reverse_proxy hasura:8080
+    }
+
+    handle_path /* {
+        reverse_proxy django:8000
+    }
+}

@@ -1,0 +1,89 @@
+version: "3"
+
+services:
+  db:
+    image: postgres
+    container_name: demo-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - demo_db_v1:/var/lib/postgresql/data
+    networks:
+      - db_network
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_PORT: 5432
+      POSTGRES_HOST: db
+
+  django:
+    image: python:3.11-slim
+    container_name: django-app
+    volumes:
+      - ./django:/code
+    build: ./django
+    command: bash -c "python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    restart: always
+    networks:
+      - db_network
+      - caddy
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONNUNBUFFERED: "1"
+      DJANGO_SECRET: "TGbcau1232"
+
+  hasura:
+    image: hasura/graphql-engine:latest.cli-migrations-v2
+    # volumes:
+    #   - ./hasura/migrations:/hasura-migrations
+    #   - ./hasura/metadata:/hasura-metadata
+    container_name: demo-hasura
+    restart: always
+    depends_on:
+      - "db"
+      - "django"
+    environment:
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: "public"
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: "startup, http-log, webhook-log, websocket-log, query-log"
+      HASURA_GRAPHQL_DATABASE_URL: "postgres://admin:admin@db:5432/demo"
+      HASURA_GRAPHQL_ADMIN_SECRET: "password"
+      HASURA_GRAPHQL_JWT_SECRET: '{ "type": "HS256", "key": "Q3d5ymmEjNBw37XQdL4xeRVvDCxgvqFrisALR4bng-0" }' # *** CHANGE THIS ***
+    ports:
+      - "8080:8080"
+    networks:
+      - db_network
+      - caddy
+
+  caddy:
+    restart: unless-stopped
+    image: caddy
+    container_name: demo_caddy
+    volumes:
+      - static:/static/djstatic
+      - caddy_config:/config
+      - caddy_data:/data
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/cert.crt:/etc/pki/tls/certs/cert.crt
+      - ./caddy/cert.key:/etc/pki/tls/private/cert.key
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - django
+      - hasura
+
+networks:
+  db_network:
+  caddy:
+
+volumes:
+  demo_db_v1:
+  caddy_config:
+  caddy_data:
+  static:
